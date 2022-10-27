@@ -171,3 +171,16 @@ fromJuciy img = (juicyPixelFormat ([]::[p]), V2 w h, p)
     w = fromIntegral $ imageWidth img
     h = fromIntegral $ imageHeight img
     p = V.unsafeCast $ imageData img
+
+-- | Make a thumbnail at the given time in seconds and convert it to
+-- JuicyPixels Image
+thumbnailImage :: forall p. JuicyPixelFormat p
+               => InputSource -> Double -> IO (Maybe (Image p))
+thumbnailImage inp time = runMaybeT $ do
+  (getFrame, cleanup) <- lift' $ thumbnailFrame fmt inp time
+  frame <- MaybeT getFrame
+  result <- MaybeT $ toJuicyImage frame
+  result <$ liftIO cleanup
+  where
+    lift' = MaybeT . fmap (either (const Nothing) Just) . runExceptT
+    fmt = juicyPixelFormat ([] :: [p])

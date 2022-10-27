@@ -70,6 +70,9 @@ foreign import ccall "av_find_input_format"
 foreign import ccall "av_format_set_video_codec"
   av_format_set_video_codec :: AVFormatContext -> AVCodec -> IO ()
 
+foreign import ccall "av_seek_frame"
+  av_seek_frame :: AVFormatContext -> CInt -> CInt -> CInt -> IO CInt
+
 dictSet :: Ptr AVDictionary -> String -> String -> IO ()
 dictSet d k v = do
   r <- withCString k $ \k' -> withCString v $ \v' ->
@@ -369,3 +372,17 @@ prepareReader fmtCtx vidStream dstFmt codCtx =
              else free_packet pkt >> getFrame
            else free_packet pkt >> getFrame
      return (getFrame `catchError` const (return Nothing), cleanup)
+
+-- | Make a thumbnail at the given time in seconds
+thumbnailFrame :: (MonadIO m, MonadError String m)
+               => AVPixelFormat -> InputSource -> Double -> m (IO (Maybe AVFrame), IO ())
+thumbnailFrame dstFmt ipt time =
+  do inputContext <- openInput ipt
+     checkStreams inputContext
+     (vidStreamIndex, ctx, cod, vidStream) <- findVideoStream inputContext
+     AVRational num den <- liftIO $ getTimeBase vidStream
+     let
+       seekTarget = floor $ (time * fromIntegral den) / fromIntegral num
+     liftIO $ av_seek_frame inputContext vidStreamIndex seekTarget 4
+     _ <- openCodec ctx cod
+     prepareReader inputContext vidStreamIndex dstFmt ctx
